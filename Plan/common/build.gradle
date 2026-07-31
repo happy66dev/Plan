@@ -137,20 +137,62 @@ node {
     nodeProjectDir = file("$rootDir/react/dashboard")
 }
 
-tasks.register("bundle", YarnTask) {
-    // Skip Yarn build on Jitpack since Jitpack doesn't offer gclib version compatible with Node 20
-    // Jitpack build is used mainly for java dependencies.
-    onlyIf("not running in Jitpack") { !project.hasProperty("isJitpack") }
-    dependsOn yarn
-    inputs.files(fileTree("$rootDir/react/dashboard/src"))
-    inputs.file("$rootDir/react/dashboard/package.json")
-    inputs.file("$rootDir/react/dashboard/vite.config.ts")
-    inputs.file("$rootDir/react/dashboard/tsconfig.json")
-    inputs.file("$rootDir/react/dashboard/tsconfig.node.json")
+// 判断当前操作系统是否为 Windows（node-gradle 的 Exec 机制在 Windows 上有兼容问题，需要走不同的执行分支喵~）
+def isWindows = System.getProperty("os.name").toLowerCase().contains("win")
+if (isWindows) {
+    // Windows 分支：用 ProcessBuilder 直接跑 yarn build，规避 node-gradle 在 Windows 上 Exec 环境导致的 tsc 启动失败问题喵~
+    tasks.register("bundle") {
+        // 跳过 Yarn 构建（Jitpack 没有与 Node 20 兼容的 gclib，主要用 Java 依赖）
+        onlyIf("not running in Jitpack") { !project.hasProperty("isJitpack") }
+        dependsOn yarn
+        inputs.files(fileTree("$rootDir/react/dashboard/src"))
+        inputs.file("$rootDir/react/dashboard/package.json")
+        inputs.file("$rootDir/react/dashboard/vite.config.ts")
+        inputs.file("$rootDir/react/dashboard/tsconfig.json")
+        inputs.file("$rootDir/react/dashboard/tsconfig.node.json")
 
-    outputs.dir("$rootDir/react/dashboard/build")
+        outputs.dir("$rootDir/react/dashboard/build")
 
-    args = ["run", "build"]
+        doLast {
+            // yarn.cmd 的完整路径（node-gradle 下载的 yarn 可执行文件）
+            def yarnPath = "$rootDir/common/.gradle/yarn/yarn-latest/yarn.cmd".toString()
+            // 构造命令行：用 cmd /c 启动 yarn.cmd 执行 build 脚本（Windows 上需要 cmd 才能运行 .cmd 文件）
+            def pb = new ProcessBuilder(["cmd", "/c", yarnPath, "run", "build"])
+            // 设置工作目录为前端项目目录，保证 yarn 能解析到 package.json
+            pb.directory(file("$rootDir/react/dashboard"))
+            // 把标准错误合并到标准输出，方便统一读取构建日志
+            pb.redirectErrorStream(true)
+            // 启动子进程执行 yarn build
+            def proc = pb.start()
+            // 阻塞读取子进程全部输出，直到进程结束（读到底部 EOF 即代表进程退出）
+            def output = proc.inputStream.text
+            // 把构建输出打印到 Gradle 控制台，方便观察进度
+            println output
+            // 获取子进程退出码
+            def exitCode = proc.waitFor()
+            // 喵~防御：退出码非 0 说明构建失败，抛出带明确信息的异常中断构建
+            if (exitCode != 0) {
+                throw new GradleException("yarn run build 失败，退出码: ${exitCode}\n${output}")
+            }
+        }
+    }
+} else {
+    // 非 Windows 平台（Linux/macOS/CI）：保持 node-gradle 原始的 YarnTask 逻辑不变，避免影响现有构建行为喵~
+    tasks.register("bundle", YarnTask) {
+        // Skip Yarn build on Jitpack since Jitpack doesn't offer gclib version compatible with Node 20
+        // Jitpack build is used mainly for java dependencies.
+        onlyIf("not running in Jitpack") { !project.hasProperty("isJitpack") }
+        dependsOn yarn
+        inputs.files(fileTree("$rootDir/react/dashboard/src"))
+        inputs.file("$rootDir/react/dashboard/package.json")
+        inputs.file("$rootDir/react/dashboard/vite.config.ts")
+        inputs.file("$rootDir/react/dashboard/tsconfig.json")
+        inputs.file("$rootDir/react/dashboard/tsconfig.node.json")
+
+        outputs.dir("$rootDir/react/dashboard/build")
+
+        args = ["run", "build"]
+    }
 }
 
 tasks.register("yarnStart", YarnTask) {
