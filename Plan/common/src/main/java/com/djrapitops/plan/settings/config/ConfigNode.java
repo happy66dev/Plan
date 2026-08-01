@@ -64,7 +64,8 @@ public class ConfigNode {
     }
 
     public Optional<ConfigNode> getNode(String path) {
-        if (path == null) {
+        // 喵~防御：空路径没有对应的子节点，直接返回空结果，避免拆分空数组。
+        if (path == null || path.isEmpty()) {
             return Optional.empty();
         }
         String[] parts = splitPathInTwo(path);
@@ -79,8 +80,16 @@ public class ConfigNode {
     }
 
     private String[] splitPathInTwo(String path) {
+        // 喵~防御：调用方传入空路径时返回两个空部分，避免访问不存在的数组下标。
+        if (path == null || path.isEmpty()) {
+            return new String[]{"", ""};
+        }
         String[] split = StringUtils.split(path, ".", 2);
-        if (split.length <= 1) {
+        // 喵~防御：分隔符清理后可能没有有效部分，统一返回安全的空路径结果。
+        if (split == null || split.length == 0) {
+            return new String[]{"", ""};
+        }
+        if (split.length == 1) {
             return new String[]{split[0], ""};
         }
         return split;

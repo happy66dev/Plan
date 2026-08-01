@@ -17,11 +17,14 @@
 package com.djrapitops.plan.delivery.web;
 
 import com.djrapitops.plan.storage.file.PlanFiles;
+import com.djrapitops.plan.storage.file.Resource;
 import extension.FullSystemExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mockito;
 import utilities.TestResources;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -30,6 +33,8 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.mockito.Mockito.when;
 
 /**
  * @author AuroraLS3
@@ -47,6 +52,25 @@ class AssetVersionsTest {
                 .sorted()
                 .toList();
         assertEquals(expected, themeNames);
+    }
+
+    @Test
+    void emptyAssetVersionPathDoesNotBreakLatestVersionLookup() throws IOException {
+        // 喵~防御：使用独立模拟对象隔离测试资源，避免依赖真实构建产物。
+        PlanFiles files = Mockito.mock(PlanFiles.class);
+        // 喵~防御：模拟 AssetVersion.yml 资源，确保异常输入可重复构造。
+        Resource assetVersionResource = Mockito.mock(Resource.class);
+        // 喵~防御：提供空资源内容，模拟 AssetVersion.yml 没有任何有效配置路径的异常输入。
+        when(assetVersionResource.asInputStream()).thenAnswer(invocation ->
+                new ByteArrayInputStream(new byte[0]));
+        // 喵~防御：让 AssetVersions 从模拟的 AssetVersion.yml 读取测试配置。
+        when(files.getResourceFromJar("AssetVersion.yml")).thenReturn(assetVersionResource);
+
+        AssetVersions assetVersions = new AssetVersions(files);
+        // 喵~防御：空配置路径不应再触发数组越界或空值拆箱异常。
+        assertDoesNotThrow(() -> assetVersions.prepare());
+        // 喵~防御：没有有效资源版本时使用安全的 0 版本值。
+        assertEquals(0L, assetVersions.getLatestWebAssetVersion().orElseThrow());
     }
 
     private Stream<String> getFileNamesInFolder(File folder) {

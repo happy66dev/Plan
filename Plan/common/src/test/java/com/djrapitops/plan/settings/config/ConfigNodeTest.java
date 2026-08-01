@@ -143,6 +143,14 @@ class ConfigNodeTest {
     }
 
     @Test
+    void emptyPathDoesNotThrowOrFindNode() {
+        // 喵~防御：空路径代表没有要查找的配置节点，应返回空结果而不是抛出数组越界异常。
+        assertTrue(testTree.getNode("").isEmpty());
+        // 喵~防御：只有分隔符的路径也没有有效节点，应安全返回空结果。
+        assertTrue(testTree.getNode(".").isEmpty());
+    }
+
+    @Test
     void getNodeDoesNotAddNodes() {
         assertFalse(testTree.getNode("NonexistentNode").isPresent());
     }

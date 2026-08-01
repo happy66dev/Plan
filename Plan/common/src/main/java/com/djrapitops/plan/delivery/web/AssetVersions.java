@@ -59,7 +59,15 @@ public class AssetVersions {
 
         long max = 0;
         for (String configPath : webAssetConfig.getConfigPaths()) {
-            max = Math.max(max, webAssetConfig.getLong(configPath));
+            // 喵~防御：忽略空配置路径，避免把根节点传入数值读取逻辑。
+            if (configPath == null || configPath.isEmpty()) {
+                continue;
+            }
+            Long assetVersion = webAssetConfig.getLong(configPath);
+            // 喵~防御：忽略缺失或无法解析的版本值，避免自动拆箱 null 导致请求失败。
+            if (assetVersion != null) {
+                max = Math.max(max, assetVersion);
+            }
         }
 
         return Optional.of(max);
