@@ -41,6 +41,7 @@ import com.djrapitops.plan.settings.locale.lang.GenericLang;
 import com.djrapitops.plan.settings.theme.Theme;
 import com.djrapitops.plan.storage.database.DBSystem;
 import com.djrapitops.plan.storage.database.Database;
+import com.djrapitops.plan.storage.database.queries.analysis.PlayerRankQueries;
 import com.djrapitops.plan.storage.database.queries.containers.PlayerContainerQuery;
 import com.djrapitops.plan.storage.database.queries.objects.ServerQueries;
 import com.djrapitops.plan.utilities.comparators.DateHolderRecentComparator;
@@ -52,6 +53,7 @@ import javax.inject.Singleton;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 @Singleton
 public class PlayerJSONCreator {
@@ -235,7 +237,51 @@ public class PlayerJSONCreator {
         info.put("last_seen", player.getValue(PlayerKeys.LAST_SEEN).map(Object.class::cast).orElse("-"));
         info.put("last_seen_raw_value", player.getValue(PlayerKeys.LAST_SEEN).orElse(0L));
 
+        // 喵~注意:为每个可排名数值字段追加全服排名,每条约一条聚合 SQL,见 addRanks 内注释
+        addRanks(info, player.getUnsafe(PlayerKeys.UUID));
+
         return info;
+    }
+
+    /**
+     * 为 info 里的各个可排名数值字段追加全服排名喵~
+     * 排名口径为全服终身,与 info 展示的数值一致。
+     *
+     * @param info 已组装好的 info 数据 map,排名结果会写入其中
+     * @param playerUUID 玩家 UUID,用于查询该玩家各指标的全服排名
+     */
+    private void addRanks(Map<String, Object> info, UUID playerUUID) {
+        // 获取数据库访问对象,供各排名查询使用
+        Database db = dbSystem.getDatabase();
+        // 逐个字段查询排名;使用 Supplier 延迟执行,便于在单个字段失败时优雅跳过
+        addRank(info, "playtime", () -> db.query(PlayerRankQueries.playtimeRank(playerUUID)));
+        addRank(info, "active_playtime", () -> db.query(PlayerRankQueries.activePlaytimeRank(playerUUID)));
+        addRank(info, "afk_time", () -> db.query(PlayerRankQueries.afkTimeRank(playerUUID)));
+        addRank(info, "session_count", () -> db.query(PlayerRankQueries.sessionCountRank(playerUUID)));
+        addRank(info, "mob_kill_count", () -> db.query(PlayerRankQueries.mobKillCountRank(playerUUID)));
+        addRank(info, "death_count", () -> db.query(PlayerRankQueries.deathCountRank(playerUUID)));
+        addRank(info, "player_kill_count", () -> db.query(PlayerRankQueries.playerKillCountRank(playerUUID)));
+        addRank(info, "kick_count", () -> db.query(PlayerRankQueries.kickCountRank(playerUUID)));
+    }
+
+    /**
+     * 将单个字段的排名结果写入 info 喵~ 输出两个字段:xxx_rank(名次)与 xxx_rank_total(全服分母)。
+     *
+     * @param info 目标数据 map
+     * @param field 字段名,用于拼出 xxx_rank 与 xxx_rank_total
+     * @param rankQuery 延迟执行的排名查询,返回可选的排名结果
+     */
+    private void addRank(Map<String, Object> info, String field, Supplier<Optional<PlayerRankQueries.PlayerRank>> rankQuery) {
+        try {
+            // 喵~防御:排名结果存在才写入;玩家无该指标值时不写入,避免 0/0
+            rankQuery.get().ifPresent(rank -> {
+                info.put(field + "_rank", rank.getRank());
+                info.put(field + "_rank_total", rank.getTotal());
+            });
+        } catch (RuntimeException rankingFailed) {
+            // 喵~防御:单个字段排名查询失败只跳过该字段,绝不影响整个 /v1/player 页面的响应
+            // 用空 catch 块,排名属于增强信息,失败时静默降级
+        }
     }
 
     private Map<String, Object> createLimitedInfoMap(PlayerContainer player) {

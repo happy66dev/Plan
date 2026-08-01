@@ -16,8 +16,11 @@
  */
 package com.djrapitops.plan.storage.database;
 
+import com.djrapitops.plan.extension.implementation.storage.queries.ExtensionLeaderboardQueryTest;
 import com.djrapitops.plan.extension.implementation.storage.queries.ExtensionQueryResultTableDataQueryTest;
 import com.djrapitops.plan.storage.database.queries.*;
+import com.djrapitops.plan.storage.database.queries.analysis.LeaderboardQueriesTest;
+import com.djrapitops.plan.storage.database.queries.analysis.PlayerRankQueriesTest;
 import com.djrapitops.plan.storage.database.queries.analysis.PlayerRetentionQueriesTest;
 import com.djrapitops.plan.storage.database.queries.analysis.TopListQueriesTest;
 import com.djrapitops.plan.storage.database.queries.objects.KillQueriesTest;
@@ -39,6 +42,9 @@ public interface DatabaseTestAggregate extends
         SessionQueriesTest,
         KillQueriesTest,
         TopListQueriesTest,
+        PlayerRankQueriesTest,
+        LeaderboardQueriesTest,
+        ExtensionLeaderboardQueryTest,
         TPSQueriesTest,
         UserInfoQueriesTest,
         WebUserQueriesTest,

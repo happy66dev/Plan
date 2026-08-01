@@ -99,6 +99,7 @@ public class RootJSONResolver {
             AllowlistJSONResolver allowlistJSONResolver,
             PlayersOnlineJSONResolver playersOnlineJSONResolver,
             DataPointJSONResolver dataPointJSONResolver,
+            LeaderboardJSONResolver leaderboardJSONResolver,
 
             ThemeJSONResolver themeJSONResolver,
             SaveThemeJSONResolver saveThemeJSONResolver,
@@ -148,7 +149,8 @@ public class RootJSONResolver {
                 .add("gameAllowlistBounces", allowlistJSONResolver)
                 .add("theme", themeJSONResolver)
                 .add("playersOnline", playersOnlineJSONResolver)
-                .add("datapoint", dataPointJSONResolver);
+                .add("datapoint", dataPointJSONResolver)
+                .add("leaderboard", leaderboardJSONResolver);
 
         this.webServer = webServer;
         // These endpoints require authentication to be enabled.
