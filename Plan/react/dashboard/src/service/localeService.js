@@ -6,6 +6,7 @@ import {initReactI18next, useTranslation} from 'react-i18next';
 import {fetchAvailableLocales} from "./metadataService";
 import {baseAddress, staticSite} from "./backendConfiguration";
 import {isNumber} from "../util/isNumber.js";
+import {isPlanEmbedCandidate} from "../embed/EmbedContext";
 import {useMemo} from "react";
 
 /**
@@ -51,9 +52,15 @@ export const localeService = {
                 this.languageVersions = [];
             }
 
-            this.clientLocale = window.localStorage.getItem("locale");
+            // 喵~嵌入体验始终强制中文，普通页面继续读取用户保存的语言偏好喵~
+            this.clientLocale = isPlanEmbedCandidate() ? "CN" : window.localStorage.getItem("locale");
+            // 喵~普通页面未保存语言时回退为服务器默认语言喵~
             if (!this.clientLocale) {
                 this.clientLocale = this.defaultLanguage;
+            }
+            // 喵~防御：嵌入模式必须存在中文语言包，否则明确失败而非悄悄显示其他语言喵~
+            if (isPlanEmbedCandidate() && !(this.clientLocale in this.availableLanguages)) {
+                throw Error("The embedded player page requires the CN locale!");
             }
             let loadPath = baseAddress + '/v1/locale/{{lng}}';
             if (staticSite) loadPath = baseAddress + '/locale/{{lng}}.json'
@@ -93,6 +100,10 @@ export const localeService = {
      * @see /v1/language endpoint for available language codes
      */
     loadLocale: async function (langCode) {
+        // 喵~防御：嵌入体验锁定中文，拒绝语言选择器或脚本切换到其他语言喵~
+        if (isPlanEmbedCandidate() && langCode !== "CN") {
+            return;
+        }
         if (i18next.language === langCode) {
             return;
         }

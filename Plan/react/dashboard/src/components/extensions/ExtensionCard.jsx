@@ -12,6 +12,7 @@ import {Link} from "react-router";
 import FormattedTime from "../text/FormattedTime.jsx";
 import FormattedDate from "../text/FormattedDate.tsx";
 import {useTranslation} from "react-i18next";
+import {useEmbed} from "../../embed/EmbedContext";
 
 export const ExtensionCardWrapper = ({extension, children}) => {
     const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -68,12 +69,16 @@ const sanitizeComponent = (component) => {
 }
 
 export const ExtensionValueTableCell = ({data}) => {
+    // 喵~读取嵌入状态，避免扩展数据提供任意站内跳转链接喵~
+    const {isEmbedMode} = useEmbed();
     if (!data) return '-';
 
     const title = data.description.description;
     if (data.type === 'STRING') {
         return (<ColoredText text={data.value}/>);
     } else if (data.type === 'LINK') {
+        // 喵~嵌入体验将扩展链接降级为纯文本，避免扩展提供越界路由喵~
+        if (isEmbedMode) return (<ColoredText text={data.value?.text}/>);
         return (<Link to={data.value?.link}><ColoredText text={data.value?.text}/></Link>);
     } else if (data.type === 'COMPONENT') {
         return (<MinecraftChat component={sanitizeComponent(JSON.parse(data.value))}/>)
@@ -89,6 +94,8 @@ export const ExtensionValueTableCell = ({data}) => {
 }
 
 const ExtensionValue = ({data}) => {
+    // 喵~读取嵌入状态，避免扩展值渲染任意站内跳转链接喵~
+    const {isEmbedMode} = useEmbed();
     const {t} = useTranslation();
     const color = data.description.icon.colorClass;
     const colorClass = color?.startsWith("col-") ? color : "col-" + color;
@@ -106,7 +113,7 @@ const ExtensionValue = ({data}) => {
         return (
             <p title={title}>
                 {icon && <Fa icon={icon} className={colorClass}/>} {name}
-                {<End><Link to={data.value?.link}><ColoredText text={data.value?.text}/></Link></End>}
+                {<End>{isEmbedMode ? <ColoredText text={data.value?.text}/> : <Link to={data.value?.link}><ColoredText text={data.value?.text}/></Link>}</End>}
             </p>
         );
     } else if (data.type === 'COMPONENT') {

@@ -29,7 +29,7 @@ const LanguageSelector = () => {
     )
 }
 
-const Header = ({page, tab, hideUpdater}) => {
+const Header = ({page, tab, hideUpdater, embedded}) => {
     const {authRequired, user} = useAuth();
     const {toggleColorChooser} = useTheme();
     const {t} = useTranslation();
@@ -42,14 +42,14 @@ const Header = ({page, tab, hideUpdater}) => {
         <nav className="nav-header nav mt-3 align-items-center justify-content-between container-fluid">
             <div className="d-sm-flex">
                 <h1 className="h3 mb-0 header">
-                    <button onClick={toggleSidebar}>
+                    {!embedded && <button onClick={toggleSidebar}>
                         <Fa icon={faBars} className={"sidebar-toggler"}/>
-                    </button>
+                    </button>}
                     {page}
                     {tab ? <>{' '}&middot; {t(tab)}</> : ''}</h1>
             </div>
 
-            {!hideUpdater && <>
+            {!embedded && !hideUpdater && <>
                 <span className="topbar-divider"/>
                 <div className="refresh-element">
                     {!staticSite && <button onClick={requestUpdate}>
@@ -61,13 +61,13 @@ const Header = ({page, tab, hideUpdater}) => {
                 </div>
             </>}
 
-            <div className="ms-auto">
+            {!embedded && <div className="ms-auto">
                 <LanguageSelector/>
-            </div>
+            </div>}
 
-            <div className="topbar-divider"/>
+            {!embedded && <div className="topbar-divider"/>}
 
-            <Dropdown className="nav-item">
+            {!embedded && <Dropdown className="nav-item">
                 <Dropdown.Toggle variant='' style={{'--bs-btn-color': 'var(--color-forms-input-text)'}}>
                     {authRequired && user ? <>
                         <span className="me-1 login-username">{user.username} </span>
@@ -83,7 +83,7 @@ const Header = ({page, tab, hideUpdater}) => {
                         <Fa icon={faDoorOpen}/> {t('html.login.logout')}
                     </Dropdown.Item> : ''}
                 </Dropdown.Menu>
-            </Dropdown>
+            </Dropdown>}
         </nav>
     )
 }

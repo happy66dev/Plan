@@ -23,6 +23,7 @@ import {PreferencesContextProvider} from "./hooks/preferencesHook";
 import {ThemeStorageContextProvider} from "./hooks/context/themeContextHook.js";
 import {ThemeStyleCss} from "./components/theme/ThemeStyleCss.js";
 import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
+import {EmbedContextProvider, getPlanEmbedCandidate, isPlanEmbedPathAllowed} from "./embed/EmbedContext";
 
 const PlayerPage = React.lazy(() => import("./views/layout/PlayerPage"));
 const PlayerOverview = React.lazy(() => import("./views/player/PlayerOverview"));
@@ -230,6 +231,26 @@ const router = createBrowserRouter(
     ), {basename: getBasename()}
 );
 
+// 喵~读取嵌入候选配置，普通 Plan 页面保持空值且不安装路由限制喵~
+const planEmbedCandidate = getPlanEmbedCandidate();
+
+// 喵~嵌入模式在 React Router 状态变化时把越界页面替换回锁定玩家概览喵~
+if (planEmbedCandidate) {
+    // 喵~定义锁定玩家的固定概览地址，所有禁止页面均回退到此处喵~
+    const embeddedPlayerOverviewPath = `/player/${encodeURIComponent(planEmbedCandidate.playerIdentifier)}/overview`;
+    // 喵~订阅路由状态，覆盖首次加载、点击、浏览器前进和后退喵~
+    router.subscribe((routerState) => {
+        // 喵~防御：仅允许嵌入白名单中的当前玩家页面，其他页面立即替换喵~
+        if (!isPlanEmbedPathAllowed(routerState.location.pathname, planEmbedCandidate.playerIdentifier)) {
+            router.navigate(embeddedPlayerOverviewPath, {replace: true});
+        }
+    });
+    // 喵~防御：应用首次加载到越界地址时立即重定向，避免短暂渲染网络或管理页面喵~
+    if (!isPlanEmbedPathAllowed(router.state.location.pathname, planEmbedCandidate.playerIdentifier)) {
+        router.navigate(embeddedPlayerOverviewPath, {replace: true});
+    }
+}
+
 const Wrapper = ({children}: PropsWithChildren) => {
     const {nightModeEnabled} = useTheme();
 
@@ -253,12 +274,14 @@ function App() {
 
     return (
         <div className="App">
-            <ContextProviders>
-                <ThemeStyleCss/>
-                <Wrapper>
-                    <RouterProvider router={router}/>
-                </Wrapper>
-            </ContextProviders>
+            <EmbedContextProvider>
+                <ContextProviders>
+                    <ThemeStyleCss/>
+                    <Wrapper>
+                        <RouterProvider router={router}/>
+                    </Wrapper>
+                </ContextProviders>
+            </EmbedContextProvider>
         </div>
     );
 }
