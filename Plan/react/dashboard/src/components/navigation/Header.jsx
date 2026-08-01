@@ -45,6 +45,9 @@ const Header = ({page, tab, hideUpdater, embedded}) => {
                     {!embedded && <button onClick={toggleSidebar}>
                         <Fa icon={faBars} className={"sidebar-toggler"}/>
                     </button>}
+                    {embedded && <button onClick={toggleSidebar} aria-label="打开玩家导航">
+                        <Fa icon={faBars} className={"sidebar-toggler"}/>
+                    </button>}
                     {page}
                     {tab ? <>{' '}&middot; {t(tab)}</> : ''}</h1>
             </div>

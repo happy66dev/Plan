@@ -76,8 +76,7 @@ const PlayerPage = () => {
 
     return (
         <>
-            {!isEmbedMode && <Sidebar page={player?.info?.name} items={player ? sidebarItems : []}/>}
-            <div className="d-flex flex-column" id="content-wrapper">
+            <Sidebar page={player?.info?.name} items={player ? sidebarItems : []} embedded={isEmbedMode}/>            <div className="d-flex flex-column" id="content-wrapper">
                 <Header page={player?.info?.name} tab={currentTab} embedded={isEmbedMode}/>
                 <div id="content" style={{display: 'flex'}}>
                     <main className="container-fluid mt-4">

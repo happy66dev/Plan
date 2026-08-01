@@ -189,7 +189,7 @@ const renderItem = (item, i, openCollapse, setOpenCollapse, t, windowWidth, coll
     return <hr key={i} className="sidebar-divider"/>
 }
 
-const Sidebar = ({page, items, openItemIndex, keepOpen}) => {
+const Sidebar = ({page, items, openItemIndex, keepOpen, embedded = false}) => {
     const {t} = useTranslation();
     const {currentTab, sidebarExpanded, setSidebarExpanded} = useNavigation();
     const {authRequired, hasPermission, hasChildPermission} = useAuth();
@@ -247,19 +247,19 @@ const Sidebar = ({page, items, openItemIndex, keepOpen}) => {
         <>
             {(sidebarExpanded || keepOpen) &&
                 <ul className={"navbar-nav sidebar sidebar-dark accordion"} id="accordionSidebar">
-                    <Logo/>
-                    <PageNavigationItem page={page}/>
-                    <Divider showMargin={items.length && !items[0].contents && items[0].href === undefined}/>
+                    {!embedded && <Logo/>}
+                    {!embedded && <PageNavigationItem page={page}/>}
+                    {!embedded && <Divider showMargin={items.length && !items[0].contents && items[0].href === undefined}/>}
                     {items.length ? items.filter(item => item !== undefined)
                         .filter(isVisible)
                         .map((item, i) => renderItem(item, i, openCollapse, toggleCollapse, t, windowWidth, collapseConditionallyOnItemClick)) : ''}
-                    <Divider/>
-                    <FooterButtons
+                    {!embedded && <Divider/>}
+                    {!embedded && <FooterButtons
                         collapseSidebar={collapseConditionallyOnItemClick}
                         toggleInfoModal={toggleInfoModal}
                         toggleVersionModal={toggleVersionModal}
                         versionInfo={versionInfo}
-                    />
+                    />}
                 </ul>}
             <PluginInformationModal open={infoModalOpen} toggle={toggleInfoModal}/>
             <VersionInformationModal open={versionModalOpen} toggle={toggleVersionModal} versionInfo={versionInfo}/>
