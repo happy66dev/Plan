@@ -73,13 +73,20 @@ export const NavigationContextProvider = ({children}: PropsWithChildren) => {
     // useEffect(requestUpdate, [currentTab]); // Force data to update when changing tab
 
     const finishUpdate = useCallback((date: number, formatted: string, isStillUpdating: boolean) => {
-        if (date) {
-            if (!lastUpdate.date || date > lastUpdate.date) {
-                setLastUpdate({date, formatted});
-            }
-            setUpdating(isStillUpdating);
+        // 喵~将接口时间转换为有限数字，防止异常响应污染刷新时间显示喵~
+        const numericDate = Number(date);
+        // 喵~只有有效的正数时间戳才更新顶部最后刷新时间喵~
+        if (Number.isFinite(numericDate) && numericDate > 0) {
+            setLastUpdate(previousLastUpdate => {
+                // 喵~防御：旧响应不能覆盖更新的刷新时间喵~
+                if (previousLastUpdate.date && numericDate <= previousLastUpdate.date) return previousLastUpdate;
+                // 喵~保存经过校验的刷新时间，供 Header 显示喵~
+                return {date: numericDate, formatted};
+            });
         }
-    }, [setLastUpdate, setUpdating, lastUpdate]);
+        // 喵~无论成功或失败都同步刷新状态，避免异常请求永久锁住刷新按钮喵~
+        setUpdating(Boolean(isStillUpdating));
+    }, [setLastUpdate, setUpdating]);
 
     const toggleSidebar = useCallback(() => {
         setSidebarExpanded(!sidebarExpanded);

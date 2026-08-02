@@ -13,7 +13,10 @@ export const useTimeAmountFormatter = () => {
         if (ms === null || ms < 0) {
             return "-";
         }
-        let x = ms / 1000;
+        const numericMilliseconds = Number(ms);
+        if (!Number.isFinite(numericMilliseconds)) return "";
+        if (!timePreferences) return "";
+        let x = numericMilliseconds / 1000;
         let seconds = x % 60;
         x /= 60;
         let minutes = x % 60;
@@ -32,7 +35,7 @@ export const useTimeAmountFormatter = () => {
             yearsDisplay: 'auto',
             months: 'long',
             monthsDisplay: 'auto',
-            secondsDisplay: ms < 1000 ? 'always' : 'auto',
+            secondsDisplay: numericMilliseconds < 1000 ? 'always' : 'auto',
         };
         // Temporary support for old format, we can later move the whole thing to the preferences menu,
         // so that there's a dropdown of options that are same as above, but modified for each option.

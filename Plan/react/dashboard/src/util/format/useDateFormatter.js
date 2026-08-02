@@ -16,7 +16,7 @@ const useDatePreferences = (includeSeconds) => {
     const {preferencesLoaded, dateFormatFull, dateFormatNoSeconds, recentDaysInDateFormat} = usePreferences();
 
     return useMemo(() => {
-        if (!preferencesLoaded) return {};
+        if (!preferencesLoaded || !Number.isFinite(timeZoneOffsetHours)) return {};
 
         const pattern = includeSeconds ? dateFormatFull : dateFormatNoSeconds;
         const recentDays = recentDaysInDateFormat;
@@ -25,7 +25,7 @@ const useDatePreferences = (includeSeconds) => {
         const offset = timeZoneOffsetHours * 60 * 60 * 1000;
 
         return {pattern, recentDays, recentDaysPattern, offset};
-    }, [preferencesLoaded, dateFormatFull, dateFormatNoSeconds, recentDaysInDateFormat]);
+    }, [preferencesLoaded, dateFormatFull, dateFormatNoSeconds, recentDaysInDateFormat, timeZoneOffsetHours]);
 }
 
 export const useDateFormatter = (includeSeconds, overrides = {}) => {
@@ -38,11 +38,14 @@ export const useDateFormatter = (includeSeconds, overrides = {}) => {
 
     const formatDate = useCallback((date) => {
         if (!isNumber(date)) return date;
-        if (date === 0) return '-'
+        const numericDate = Number(date);
+        if (!Number.isFinite(numericDate)) return '';
+        if (numericDate === 0) return '-';
+        if (!pattern || !Number.isFinite(offset)) return '';
         const dayMs = 24 * 60 * 60 * 1000;
         const timestamp = date - offset;
         const now = Date.now() - offset;
-        const fromStartOfToday = (now - offset) % dayMs;
+        const fromStartOfToday = ((now % dayMs) + dayMs) % dayMs;
         const today = now - fromStartOfToday;
         const yesterday = today - dayMs;
         const tomorrow = today + dayMs;

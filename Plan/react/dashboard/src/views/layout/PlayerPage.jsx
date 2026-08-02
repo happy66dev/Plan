@@ -25,7 +25,7 @@ const PlayerPage = () => {
     const {sidebarItems, setSidebarItems} = useNavigation();
 
     const {identifier} = useParams();
-    const {currentTab, finishUpdate} = useNavigation();
+    const {currentTab} = useNavigation();
 
     const {data: player, loadingError} = useDataRequest(fetchPlayer, [identifier], seePlayer)
 
@@ -63,9 +63,7 @@ const PlayerPage = () => {
 
         setSidebarItems(items);
         window.document.title = `Plan | ${player?.info?.name}`;
-
-        finishUpdate(player.timestamp, player.timestamp_f);
-    }, [player, t, i18n, finishUpdate, setSidebarItems])
+    }, [player, t, i18n, setSidebarItems])
 
     const {authRequired, loggedIn} = useAuth();
     if (authRequired && !loggedIn) return <MainPageRedirect/>;
