@@ -5,11 +5,8 @@ import ColoredText from "../text/ColoredText";
 import {Link} from "react-router";
 import FormattedTime from "../text/FormattedTime.jsx";
 import FormattedDate from "../text/FormattedDate.tsx";
-import {useEmbed} from "../../embed/EmbedContext";
 
 const ExtensionDataTable = ({table}) => {
-    // 喵~读取嵌入状态，避免扩展表格中的玩家链接越界喵~
-    const {isEmbedMode} = useEmbed();
     const [id] = useState("extension-table-" + Date.now() + "-" + (Math.floor(Math.random() * 100000)));
     const mapToCell = (cell) => {
         const value = cell.value;
@@ -23,8 +20,7 @@ const ExtensionDataTable = ({table}) => {
             case 'DATE_SECOND':
                 return <FormattedDate date={value} includeSeconds/>;
             case 'PLAYER_NAME':
-                // 喵~嵌入体验将扩展表格中的其他玩家链接降级为纯文本喵~
-                return isEmbedMode ? value : <Link to={'/player/' + value}>{value}</Link>;
+                return <Link to={'/player/' + value}>{value}</Link>;
             case 'CHAT_COLORED':
             default:
                 return <ColoredText text={value || String(value)}/>

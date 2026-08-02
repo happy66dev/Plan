@@ -14,13 +14,10 @@ import {useAuth} from "../../hooks/authenticationHook.tsx";
 import MainPageRedirect from "../../components/navigation/MainPageRedirect";
 import {SwitchTransition} from "react-transition-group";
 import {ChartLoader} from "../../components/navigation/Loader.tsx";
-import {useEmbed} from "../../embed/EmbedContext";
 
 const HelpModal = React.lazy(() => import("../../components/modal/HelpModal"));
 
 const PlayerPage = () => {
-    // 喵~读取嵌入状态，嵌入体验不挂载可离开当前玩家的导航与工具喵~
-    const {isEmbedMode} = useEmbed();
     const {t, i18n} = useTranslation();
     const {hasChildPermission} = useAuth();
     const seePlayer = hasChildPermission('access.player')
@@ -76,9 +73,9 @@ const PlayerPage = () => {
 
     return (
         <>
-            <Sidebar page={player?.info?.name} items={player ? sidebarItems : []} embedded={isEmbedMode}/>
+            <Sidebar page={player?.info?.name} items={player ? sidebarItems : []}/>
             <div className="d-flex flex-column" id="content-wrapper">
-                <Header page={player?.info?.name} tab={currentTab} embedded={isEmbedMode}/>
+                <Header page={player?.info?.name} tab={currentTab}/>
                 <div id="content" style={{display: 'flex'}}>
                     <main className="container-fluid mt-4">
                         {player && <SwitchTransition>
@@ -87,8 +84,8 @@ const PlayerPage = () => {
                         {!player && <ChartLoader/>}
                     </main>
                     <aside>
-                        {!isEmbedMode && <ColorSelectorModal/>}
-                        {!isEmbedMode && <React.Suspense fallback={""}><HelpModal/></React.Suspense>}
+                        <ColorSelectorModal/>
+                        <React.Suspense fallback={""}><HelpModal/></React.Suspense>
                     </aside>
                 </div>
             </div>

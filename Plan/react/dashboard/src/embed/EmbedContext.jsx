@@ -7,39 +7,158 @@ const EMBED_INIT_MESSAGE_TYPE = "PLAN_EMBED_INIT";
 const EMBED_READY_MESSAGE_TYPE = "PLAN_EMBED_READY";
 // 喵~定义嵌入通信协议版本，避免不同版本消息混用喵~
 const EMBED_PROTOCOL_VERSION = 1;
+// 喵~定义 iframe 刷新时保存嵌入状态的 sessionStorage 键名喵~
+const EMBED_STORAGE_KEY = "plan.embed.state";
+// 喵~限制嵌入状态最长有效时间，过期状态不会重新启用路由限制喵~
+const EMBED_STORAGE_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
-// 喵~读取 URL 参数并在模块加载时确定候选嵌入配置，确保语言初始化前即可生效喵~
-const readEmbedCandidate = () => {
-    // 喵~防御：顶层页面不允许进入嵌入模式，避免普通 Plan 页面被意外限制喵~
-    if (window.self === window.top) return null;
-    // 喵~读取当前页面 URL，便于校验嵌入参数与玩家路由喵~
-    const currentUrl = new URL(window.location.href);
-    // 喵~读取明确的嵌入开关，避免只靠 iframe 环境误触发喵~
-    const isEmbedRequested = currentUrl.searchParams.get("embed") === "1";
-    // 喵~读取预期父页面 origin，后续 postMessage 必须精确匹配喵~
-    const parentOriginParameter = currentUrl.searchParams.get("embedParentOrigin") || "";
-    // 喵~读取由父页面生成的一次性随机 nonce，阻止其他页面猜测初始化消息喵~
-    const embedNonce = currentUrl.searchParams.get("embedNonce") || "";
-    // 喵~读取父页面锁定的玩家标识，限制嵌入体验只能显示该玩家喵~
-    const embedPlayerIdentifier = currentUrl.searchParams.get("embedPlayer") || "";
-    // 喵~从 pathname 提取当前玩家路由标识，拒绝网络页和其他页面作为嵌入入口喵~
-    const playerRouteMatch = currentUrl.pathname.match(/\/player\/([^/]+)/);
-    // 喵~防御：缺少任何必需嵌入参数时不启用嵌入模式喵~
-    if (!isEmbedRequested || !parentOriginParameter || !embedNonce || !embedPlayerIdentifier || !playerRouteMatch) return null;
+// 喵~判断当前窗口是否确实运行在 iframe 中，顶层页面永不启用嵌入状态喵~
+const isEmbeddedWindow = () => {
     try {
-        // 喵~解析并规范化父页面 origin，拒绝无效 URL 与非 HTTP(S) 协议喵~
-        const parentUrl = new URL(parentOriginParameter);
-        // 喵~防御：只允许 HTTP(S) 网站作为嵌入父页面喵~
-        if (parentUrl.protocol !== "http:" && parentUrl.protocol !== "https:") return null;
-        // 喵~防御：nonce 长度过短或包含空白字符时拒绝嵌入喵~
-        if (embedNonce.length < 16 || embedNonce.length > 256 || /\s/.test(embedNonce)) return null;
-        // 喵~防御：玩家标识必须与当前玩家路由一致喵~
-        if (decodeURIComponent(playerRouteMatch[1]) !== embedPlayerIdentifier) return null;
-        // 喵~返回经过规范化的候选嵌入配置喵~
-        return {parentOrigin: parentUrl.origin, nonce: embedNonce, playerIdentifier: embedPlayerIdentifier};
+        return window.self !== window.top;
     } catch (error) {
-        // 喵~防御：参数解析失败时保持普通 Plan 页面，避免页面崩溃喵~
+        // 喵~防御：跨窗口访问失败时按顶层页面处理，避免误启用嵌入限制喵~
+        return false;
+    }
+};
+
+// 喵~安全解码路径片段，非法百分号编码直接返回空值喵~
+const decodePathSegment = (pathSegment) => {
+    try {
+        return decodeURIComponent(pathSegment || "");
+    } catch (error) {
+        // 喵~防御：非法路径编码不能参与玩家身份匹配喵~
+        return "";
+    }
+};
+
+// 喵~把 URL pathname 拆成非空路径片段，统一处理首尾斜杠喵~
+const getPathSegments = (pathname) => String(pathname || "").split("/").filter(Boolean);
+
+// 喵~从路径中提取玩家路由和前置 basename，兼容 Plan 部署在子路径下喵~
+const getPlayerRouteInfo = (pathname) => {
+    const pathSegments = getPathSegments(pathname);
+    const playerSegmentIndex = pathSegments.indexOf("player");
+    if (playerSegmentIndex < 0 || !pathSegments[playerSegmentIndex + 1]) return null;
+    const playerIdentifier = decodePathSegment(pathSegments[playerSegmentIndex + 1]);
+    if (!playerIdentifier) return null;
+    return {
+        playerIdentifier,
+        routePrefix: pathSegments.slice(0, playerSegmentIndex)
+    };
+};
+
+// 喵~校验并规范化父页面 origin，只允许 HTTP(S) origin 喵~
+const normalizeParentOrigin = (parentOriginValue) => {
+    try {
+        const parentUrl = new URL(parentOriginValue || "");
+        if (parentUrl.protocol !== "http:" && parentUrl.protocol !== "https:") return "";
+        return parentUrl.origin;
+    } catch (error) {
+        // 喵~防御：无效父页面地址不能参与 postMessage 目标匹配喵~
+        return "";
+    }
+};
+
+// 喵~校验 nonce 长度和字符，拒绝空值、空白字符及过长输入喵~
+const isValidEmbedNonce = (embedNonce) => typeof embedNonce === "string"
+    && embedNonce.length >= 16
+    && embedNonce.length <= 256
+    && !/\s/.test(embedNonce);
+
+// 喵~读取浏览器报告的祖先页面 origin 列表，用于恢复状态时确认父页面没有变化喵~
+const getAncestorOrigins = () => {
+    try {
+        return Array.from(window.location.ancestorOrigins || []);
+    } catch (error) {
+        // 喵~防御：浏览器不支持 ancestorOrigins 时返回空列表，由调用方决定是否拒绝恢复喵~
+        return [];
+    }
+};
+
+// 喵~判断 origin 是否与当前 iframe 祖先页面一致，避免复用其他父页面留下的状态喵~
+const isParentOriginConsistent = (parentOrigin, requireAncestorMatch = false) => {
+    const ancestorOrigins = getAncestorOrigins();
+    if (!ancestorOrigins.length) return !requireAncestorMatch;
+    return ancestorOrigins.includes(parentOrigin);
+};
+
+// 喵~校验 URL 或 sessionStorage 中的嵌入字段，并返回统一候选配置喵~
+const createEmbedCandidate = ({parentOrigin, nonce, playerIdentifier, routePrefix, createdAt}) => {
+    const normalizedParentOrigin = normalizeParentOrigin(parentOrigin);
+    if (!normalizedParentOrigin || !isValidEmbedNonce(nonce) || !playerIdentifier) return null;
+    return {
+        parentOrigin: normalizedParentOrigin,
+        nonce,
+        playerIdentifier,
+        routePrefix: Array.isArray(routePrefix) ? routePrefix : [],
+        createdAt: Number.isFinite(createdAt) ? createdAt : Date.now()
+    };
+};
+
+// 喵~从当前 URL 参数读取首次嵌入配置，并校验玩家路由和父页面来源喵~
+const readQueryEmbedCandidate = (currentUrl, playerRouteInfo) => {
+    if (currentUrl.searchParams.get("embed") !== "1") return null;
+    const candidate = createEmbedCandidate({
+        parentOrigin: currentUrl.searchParams.get("embedParentOrigin"),
+        nonce: currentUrl.searchParams.get("embedNonce"),
+        playerIdentifier: currentUrl.searchParams.get("embedPlayer"),
+        routePrefix: playerRouteInfo?.routePrefix
+    });
+    if (!candidate || candidate.playerIdentifier !== playerRouteInfo?.playerIdentifier) return null;
+    // 喵~防御：若浏览器提供祖先 origin，URL 声明的父页面必须精确匹配喵~
+    if (!isParentOriginConsistent(candidate.parentOrigin)) return null;
+    return candidate;
+};
+
+// 喵~从 iframe 自身 sessionStorage 读取刷新后候选状态喵~
+const readStoredEmbedCandidate = (playerRouteInfo) => {
+    if (!isEmbeddedWindow()) return null;
+    try {
+        const storedValue = JSON.parse(window.sessionStorage.getItem(EMBED_STORAGE_KEY) || "null");
+        if (!storedValue || storedValue.protocol !== EMBED_PROTOCOL_VERSION) return null;
+        if (!Number.isFinite(storedValue.createdAt)) return null;
+        if (Date.now() - storedValue.createdAt < 0 || Date.now() - storedValue.createdAt > EMBED_STORAGE_MAX_AGE_MS) return null;
+        const candidate = createEmbedCandidate({
+            parentOrigin: storedValue.parentOrigin,
+            nonce: storedValue.nonce,
+            playerIdentifier: storedValue.playerIdentifier,
+            routePrefix: Array.isArray(storedValue.routePrefix) ? storedValue.routePrefix : playerRouteInfo?.routePrefix,
+            createdAt: storedValue.createdAt
+        });
+        if (!candidate || candidate.playerIdentifier !== playerRouteInfo?.playerIdentifier) return null;
+        // 喵~防御：恢复状态必须能在当前 iframe 祖先页面中找到原父页面 origin 喵~
+        if (!isParentOriginConsistent(candidate.parentOrigin, true)) return null;
+        return candidate;
+    } catch (error) {
+        // 喵~防御：sessionStorage 被禁用或内容损坏时按普通页面处理喵~
         return null;
+    }
+};
+
+// 喵~读取 URL 或受保护的刷新状态，模块加载后固定本次页面的嵌入候选配置喵~
+const readEmbedCandidate = () => {
+    if (!isEmbeddedWindow()) return null;
+    const currentUrl = new URL(window.location.href);
+    const playerRouteInfo = getPlayerRouteInfo(currentUrl.pathname);
+    if (!playerRouteInfo) return null;
+    return readQueryEmbedCandidate(currentUrl, playerRouteInfo)
+        || readStoredEmbedCandidate(playerRouteInfo);
+};
+
+// 喵~保存握手成功后的最小嵌入状态，供 iframe 刷新后恢复路由限制喵~
+const persistEmbedCandidate = (candidate) => {
+    try {
+        window.sessionStorage.setItem(EMBED_STORAGE_KEY, JSON.stringify({
+            protocol: EMBED_PROTOCOL_VERSION,
+            parentOrigin: candidate.parentOrigin,
+            nonce: candidate.nonce,
+            playerIdentifier: candidate.playerIdentifier,
+            routePrefix: candidate.routePrefix,
+            createdAt: Date.now()
+        }));
+    } catch (error) {
+        // 喵~防御：存储权限不足时不影响当前页面，只放弃刷新恢复喵~
     }
 };
 
@@ -48,96 +167,70 @@ const embedCandidate = readEmbedCandidate();
 
 // 喵~导出候选状态，供语言服务在 React 初始化前锁定中文喵~
 export const isPlanEmbedCandidate = () => Boolean(embedCandidate);
-// 喵~导出候选配置，供应用路由读取锁定玩家喵~
+// 喵~导出候选配置，供 React 路由在应用启动后安装统一地址守卫喵~
 export const getPlanEmbedCandidate = () => embedCandidate;
+// 喵~导出协议版本，供路由重定向构造保留嵌入参数喵~
+export const getPlanEmbedProtocolVersion = () => EMBED_PROTOCOL_VERSION;
 
-// 喵~严格匹配当前玩家允许的嵌入路径喵~
-export const isPlanEmbedPathAllowed = (pathname, lockedPlayerIdentifier) => {
-    // 喵~防御：未取得锁定玩家时拒绝所有嵌入路由喵~
+// 喵~定义嵌入模式允许访问的当前玩家功能标签页喵~
+const allowedPlayerTabs = new Set(["overview", "sessions", "pvppve", "servers"]);
+
+// 喵~比较路径前缀，允许 Router 返回去掉 basename 的 pathname喵~
+const hasPathPrefix = (pathSegments, expectedPrefix) => expectedPrefix.every((segment, index) => pathSegments[index] === segment);
+
+// 喵~校验路由地址是否属于锁定玩家的允许体验范围，并兼容 basename 喵~
+export const isPlanEmbedPathAllowed = (pathname, lockedPlayerIdentifier, routePrefix = []) => {
     if (!lockedPlayerIdentifier) return false;
-    // 喵~拆分 URL 路径段，避免首尾斜杠影响匹配喵~
-    const pathSegments = pathname.split("/").filter(Boolean);
-    // 喵~防御：嵌入体验只允许 player 路由喵~
-    if (pathSegments[0] !== "player") return false;
-    // 喵~防御：当前页面玩家必须与 iframe 启动时锁定的玩家一致喵~
-    if (decodeURIComponent(pathSegments[1] || "") !== lockedPlayerIdentifier) return false;
-    // 喵~允许未指定子页的玩家路由喵~
-    if (pathSegments.length === 2) return true;
-    // 喵~允许固定玩家信息标签页喵~
-    if (["overview", "sessions", "pvppve", "servers"].includes(pathSegments[2])) return pathSegments.length === 3;
-    // 喵~允许单层插件服务器页喵~
-    return pathSegments[2] === "plugins" && pathSegments.length === 4 && pathSegments[3] !== "";
-};
-
-// 喵~判断点击目标是否属于允许的当前玩家链接喵~
-const isSafeEmbedAnchor = (anchor, lockedPlayerIdentifier) => {
-    // 喵~防御：缺少链接或锁定玩家时拒绝点击喵~
-    if (!anchor || !lockedPlayerIdentifier) return false;
-    try {
-        // 喵~解析链接为绝对地址，处理相对链接与根路径链接喵~
-        const targetUrl = new URL(anchor.href, window.location.href);
-        // 喵~防御：禁止所有外部链接在嵌入体验内导航喵~
-        if (targetUrl.origin !== window.location.origin) return false;
-        // 喵~只允许当前玩家白名单路径喵~
-        return isPlanEmbedPathAllowed(targetUrl.pathname, lockedPlayerIdentifier);
-    } catch (error) {
-        // 喵~防御：非法 href 一律阻止喵~
-        return false;
+    const pathSegments = getPathSegments(pathname);
+    const possiblePrefixes = [routePrefix, []];
+    let playerRouteSegments = null;
+    for (const possiblePrefix of possiblePrefixes) {
+        if (!hasPathPrefix(pathSegments, possiblePrefix) || pathSegments[possiblePrefix.length] !== "player") continue;
+        playerRouteSegments = pathSegments.slice(possiblePrefix.length);
+        break;
     }
+    if (!playerRouteSegments || decodePathSegment(playerRouteSegments[1]) !== lockedPlayerIdentifier) return false;
+    if (playerRouteSegments.length === 2) return true;
+    if (allowedPlayerTabs.has(playerRouteSegments[2])) return playerRouteSegments.length === 3;
+    return playerRouteSegments[2] === "plugins" && playerRouteSegments.length === 4 && Boolean(playerRouteSegments[3]);
 };
 
 // 喵~创建默认嵌入上下文，普通访问保持完全不受影响喵~
 const EmbedContext = createContext({isEmbedMode: false, isEmbedActive: false, lockedPlayerIdentifier: ""});
 
-// 喵~提供嵌入状态、握手和统一点击拦截能力喵~
+// 喵~提供嵌入状态与受限 postMessage 握手能力，不修改原生页面 UI 喵~
 export const EmbedContextProvider = ({children}) => {
-    // 喵~候选 iframe 立即采用受限 UI，避免完整导航短暂显示喵~
     const isEmbedMode = Boolean(embedCandidate);
-    // 喵~记录父页面是否已完成来源与 nonce 校验喵~
     const [isEmbedActive, setIsEmbedActive] = useState(false);
 
     useEffect(() => {
-        // 喵~防御：普通页面不注册跨窗口与点击监听喵~
         if (!embedCandidate) return undefined;
-        // 喵~通知父页面 iframe 已准备接收初始化消息喵~
-        window.parent.postMessage({protocol: EMBED_PROTOCOL_VERSION, type: EMBED_READY_MESSAGE_TYPE, nonce: embedCandidate.nonce, playerIdentifier: embedCandidate.playerIdentifier}, embedCandidate.parentOrigin);
-        // 喵~处理父页面初始化消息并严格校验来源、窗口和 nonce 喵~
+        window.parent.postMessage({
+            protocol: EMBED_PROTOCOL_VERSION,
+            type: EMBED_READY_MESSAGE_TYPE,
+            nonce: embedCandidate.nonce,
+            playerIdentifier: embedCandidate.playerIdentifier
+        }, embedCandidate.parentOrigin);
         const handleEmbedMessage = (event) => {
-            // 喵~防御：只接受当前 iframe 父窗口消息喵~
             if (event.source !== window.parent || event.origin !== embedCandidate.parentOrigin) return;
-            // 喵~防御：消息必须是对象且字段完全匹配喵~
-            if (!event.data || typeof event.data !== "object" || event.data.protocol !== EMBED_PROTOCOL_VERSION || event.data.type !== EMBED_INIT_MESSAGE_TYPE || event.data.nonce !== embedCandidate.nonce || event.data.playerIdentifier !== embedCandidate.playerIdentifier || event.data.locale !== "CN") return;
-            // 喵~标记握手完成喵~
+            if (!event.data || typeof event.data !== "object") return;
+            if (event.data.protocol !== EMBED_PROTOCOL_VERSION || event.data.type !== EMBED_INIT_MESSAGE_TYPE) return;
+            if (event.data.nonce !== embedCandidate.nonce || event.data.playerIdentifier !== embedCandidate.playerIdentifier) return;
+            if (event.data.locale !== "CN") return;
+            persistEmbedCandidate(embedCandidate);
             setIsEmbedActive(true);
         };
-        // 喵~在文档捕获阶段拦截所有链接，覆盖第三方扩展与遗留按钮喵~
-        const blockUnsafeEmbedNavigation = (event) => {
-            // 喵~防御：只在嵌入候选模式处理点击喵~
-            if (!isEmbedMode) return;
-            // 喵~从点击目标向上查找最近的超链接喵~
-            const clickedElement = event.target instanceof Element ? event.target.closest("a") : null;
-            // 喵~允许当前玩家内部白名单链接，其余链接全部阻止喵~
-            if (clickedElement && !isSafeEmbedAnchor(clickedElement, embedCandidate.playerIdentifier)) {
-                event.preventDefault();
-                event.stopImmediatePropagation();
-            }
-        };
-        // 喵~注册窗口通信监听器喵~
         window.addEventListener("message", handleEmbedMessage);
-        // 喵~注册捕获阶段点击守卫喵~
-        document.addEventListener("click", blockUnsafeEmbedNavigation, true);
-        // 喵~组件卸载时移除监听器喵~
-        return () => {
-            window.removeEventListener("message", handleEmbedMessage);
-            document.removeEventListener("click", blockUnsafeEmbedNavigation, true);
-        };
-    }, [isEmbedMode]);
+        return () => window.removeEventListener("message", handleEmbedMessage);
+    }, []);
 
-    // 喵~缓存上下文值，减少无关重渲染喵~
-    const contextValue = useMemo(() => ({isEmbedMode, isEmbedActive, lockedPlayerIdentifier: embedCandidate?.playerIdentifier || ""}), [isEmbedMode, isEmbedActive]);
-    // 喵~向子组件提供嵌入状态喵~
+    const contextValue = useMemo(() => ({
+        isEmbedMode,
+        isEmbedActive,
+        lockedPlayerIdentifier: embedCandidate?.playerIdentifier || ""
+    }), [isEmbedMode, isEmbedActive]);
     return <EmbedContext.Provider value={contextValue}>{children}</EmbedContext.Provider>;
 };
 
-// 喵~导出读取嵌入状态的 Hook 喵~
+// 喵~导出读取嵌入状态的 Hook，保留给需要显示状态的扩展组件使用喵~
 export const useEmbed = () => useContext(EmbedContext);

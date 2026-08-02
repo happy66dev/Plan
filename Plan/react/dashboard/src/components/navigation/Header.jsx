@@ -29,7 +29,7 @@ const LanguageSelector = () => {
     )
 }
 
-const Header = ({page, tab, hideUpdater, embedded}) => {
+const Header = ({page, tab, hideUpdater}) => {
     const {authRequired, user} = useAuth();
     const {toggleColorChooser} = useTheme();
     const {t} = useTranslation();
@@ -42,17 +42,14 @@ const Header = ({page, tab, hideUpdater, embedded}) => {
         <nav className="nav-header nav mt-3 align-items-center justify-content-between container-fluid">
             <div className="d-sm-flex">
                 <h1 className="h3 mb-0 header">
-                    {!embedded && <button onClick={toggleSidebar}>
+                    <button onClick={toggleSidebar}>
                         <Fa icon={faBars} className={"sidebar-toggler"}/>
-                    </button>}
-                    {embedded && <button onClick={toggleSidebar} aria-label="打开玩家导航">
-                        <Fa icon={faBars} className={"sidebar-toggler"}/>
-                    </button>}
+                    </button>
                     {page}
                     {tab ? <>{' '}&middot; {t(tab)}</> : ''}</h1>
             </div>
 
-            {!embedded && !hideUpdater && <>
+            {!hideUpdater && <>
                 <span className="topbar-divider"/>
                 <div className="refresh-element">
                     {!staticSite && <button onClick={requestUpdate}>
@@ -64,13 +61,13 @@ const Header = ({page, tab, hideUpdater, embedded}) => {
                 </div>
             </>}
 
-            {!embedded && <div className="ms-auto">
+            <div className="ms-auto">
                 <LanguageSelector/>
-            </div>}
+            </div>
 
-            {!embedded && <div className="topbar-divider"/>}
+            <div className="topbar-divider"/>
 
-            {!embedded && <Dropdown className="nav-item">
+            <Dropdown className="nav-item">
                 <Dropdown.Toggle variant='' style={{'--bs-btn-color': 'var(--color-forms-input-text)'}}>
                     {authRequired && user ? <>
                         <span className="me-1 login-username">{user.username} </span>
@@ -86,7 +83,7 @@ const Header = ({page, tab, hideUpdater, embedded}) => {
                         <Fa icon={faDoorOpen}/> {t('html.login.logout')}
                     </Dropdown.Item> : ''}
                 </Dropdown.Menu>
-            </Dropdown>}
+            </Dropdown>
         </nav>
     )
 }

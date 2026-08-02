@@ -5,6 +5,7 @@ import './style/style.css';
 import './style/mobile.css';
 import 'react-bootstrap-range-slider/dist/react-bootstrap-range-slider.css';
 
+// 喵~导入 React 路由工具，创建页面路由并提供嵌入路由守卫喵~
 import {createBrowserRouter, createRoutesFromElements, Navigate, Route, RouterProvider} from "react-router";
 import React, {PropsWithChildren, useCallback, useEffect} from "react";
 import {ThemeContextProvider, useTheme} from "./hooks/themeHook";
@@ -234,20 +235,43 @@ const router = createBrowserRouter(
 // 喵~读取嵌入候选配置，普通 Plan 页面保持空值且不安装路由限制喵~
 const planEmbedCandidate = getPlanEmbedCandidate();
 
+// 喵~定义路由守卫需要的嵌入候选字段，避免 TypeScript 丢失配置类型喵~
+type PlanEmbedCandidate = {
+    parentOrigin: string;
+    nonce: string;
+    playerIdentifier: string;
+    routePrefix?: string[];
+};
+
+// 喵~构造固定玩家概览地址，并保留嵌入握手参数供页面刷新继续识别喵~
+const getEmbeddedPlayerOverviewTarget = (candidate: PlanEmbedCandidate) => {
+    // 喵~编码玩家标识，避免特殊字符改变路由结构喵~
+    const embeddedPlayerPath = `/player/${encodeURIComponent(candidate.playerIdentifier)}/overview`;
+    // 喵~重新组装受信任的嵌入参数，不复用任意外部 query 参数喵~
+    const embeddedQuery = new URLSearchParams({
+        embed: "1",
+        embedParentOrigin: candidate.parentOrigin,
+        embedNonce: candidate.nonce,
+        embedPlayer: candidate.playerIdentifier
+    });
+    // 喵~返回 React Router 可接受的路径与查询字符串对象喵~
+    return {pathname: embeddedPlayerPath, search: `?${embeddedQuery.toString()}`};
+};
+
 // 喵~嵌入模式在 React Router 状态变化时把越界页面替换回锁定玩家概览喵~
 if (planEmbedCandidate) {
-    // 喵~定义锁定玩家的固定概览地址，所有禁止页面均回退到此处喵~
-    const embeddedPlayerOverviewPath = `/player/${encodeURIComponent(planEmbedCandidate.playerIdentifier)}/overview`;
+    // 喵~定义锁定玩家的固定概览地址，并保留嵌入 query 参数喵~
+    const embeddedPlayerOverviewTarget = getEmbeddedPlayerOverviewTarget(planEmbedCandidate);
     // 喵~订阅路由状态，覆盖首次加载、点击、浏览器前进和后退喵~
     router.subscribe((routerState) => {
-        // 喵~防御：仅允许嵌入白名单中的当前玩家页面，其他页面立即替换喵~
-        if (!isPlanEmbedPathAllowed(routerState.location.pathname, planEmbedCandidate.playerIdentifier)) {
-            router.navigate(embeddedPlayerOverviewPath, {replace: true});
+        // 喵~防御：仅允许当前玩家白名单页面，其他页面立即替换喵~
+        if (!isPlanEmbedPathAllowed(routerState.location.pathname, planEmbedCandidate.playerIdentifier, planEmbedCandidate.routePrefix)) {
+            router.navigate(embeddedPlayerOverviewTarget, {replace: true});
         }
     });
-    // 喵~防御：应用首次加载到越界地址时立即重定向，避免短暂渲染网络或管理页面喵~
-    if (!isPlanEmbedPathAllowed(router.state.location.pathname, planEmbedCandidate.playerIdentifier)) {
-        router.navigate(embeddedPlayerOverviewPath, {replace: true});
+    // 喵~防御：首次加载越界地址时立即回到玩家概览，避免短暂渲染受限外页面喵~
+    if (!isPlanEmbedPathAllowed(router.state.location.pathname, planEmbedCandidate.playerIdentifier, planEmbedCandidate.routePrefix)) {
+        router.navigate(embeddedPlayerOverviewTarget, {replace: true});
     }
 }
 
