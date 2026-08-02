@@ -95,7 +95,7 @@ public class LeaderboardJSONResolver implements Resolver {
                     @ApiResponse(responseCode = "400", description = "If 'field' is missing/unknown, or an extension field lacks 'plugin', or parameters are invalid")
             },
             parameters = {
-                    @Parameter(in = ParameterIn.QUERY, name = "field", description = "Built-in metric name (playtime, active_playtime, afk_time, session_count, mob_kill_count, death_count, player_kill_count, kick_count) or 'extension:<providerName>'", examples = {
+                    @Parameter(in = ParameterIn.QUERY, name = "field", description = "Built-in metric name (playtime, active_playtime, afk_time, session_count, mob_kill_count, death_count, player_kill_count, max_ping, player_kdr, mob_kdr, kick_count) or 'extension:<providerName>'", examples = {
                             @ExampleObject("playtime"),
                             @ExampleObject("extension:level"),
                     }),

@@ -20,6 +20,7 @@ import com.djrapitops.plan.identification.ServerUUID;
 import com.djrapitops.plan.storage.database.queries.Query;
 import com.djrapitops.plan.storage.database.queries.QueryStatement;
 import com.djrapitops.plan.storage.database.sql.tables.KillsTable;
+import com.djrapitops.plan.storage.database.sql.tables.PingTable;
 import com.djrapitops.plan.storage.database.sql.tables.ServerTable;
 import com.djrapitops.plan.storage.database.sql.tables.SessionsTable;
 import com.djrapitops.plan.storage.database.sql.tables.UsersTable;
@@ -129,6 +130,73 @@ public class LeaderboardQueries {
     public static Query<List<TopListQueries.TopListEntry<Long>>> deathCountLeaderboard(ServerUUID server, int limit, long after, long before) {
         // 把死亡次数的聚合表达式传入通用会话聚合查询
         return sessionAggregateLeaderboard("SUM(" + SessionsTable.DEATHS + ')', server, limit, after, before);
+    }
+
+    /**
+     * 全服最大 Ping 排行榜喵~ max_ping = PingTable.max_ping 的最大值。
+     * @param server 目标服务器 UUID,为 null 表示全网络
+     * @param limit 返回条数上限
+     * @param after 时间窗起点(毫秒)
+     * @param before 时间窗终点(毫秒)
+     * @return 排行榜查询对象
+     */
+    public static Query<List<TopListQueries.TopListEntry<Long>>> maxPingLeaderboard(ServerUUID server, int limit, long after, long before) {
+        String serverFilter = server != null ? WHERE + "se." + ServerTable.SERVER_UUID + "=?" + AND : WHERE;
+        String sql = SELECT + "u." + UsersTable.USER_NAME + ", MAX(p." + PingTable.MAX_PING + ") as val" +
+                FROM + PingTable.TABLE_NAME + " p" +
+                INNER_JOIN + UsersTable.TABLE_NAME + " u on u." + UsersTable.ID + "=p." + PingTable.USER_ID +
+                INNER_JOIN + ServerTable.TABLE_NAME + " se on se." + ServerTable.ID + "=p." + PingTable.SERVER_ID +
+                serverFilter + "p." + PingTable.DATE + ">?" + AND + "p." + PingTable.DATE + "<?" +
+                GROUP_BY + "u." + UsersTable.USER_NAME + ORDER_BY + "val DESC" + LIMIT + "?";
+        return new QueryStatement<List<TopListQueries.TopListEntry<Long>>>(sql, limit) {
+            @Override public void prepare(PreparedStatement statement) throws SQLException {
+                int parameterIndex = 1;
+                if (server != null) statement.setString(parameterIndex++, server.toString());
+                statement.setLong(parameterIndex++, after); statement.setLong(parameterIndex++, before); statement.setInt(parameterIndex, limit);
+            }
+            @Override public List<TopListQueries.TopListEntry<Long>> processResults(ResultSet set) throws SQLException {
+                List<TopListQueries.TopListEntry<Long>> entries = new ArrayList<>();
+                while (set.next()) entries.add(new TopListQueries.TopListEntry<>(set.getString(UsersTable.USER_NAME), set.getLong("val")));
+                return entries;
+            }
+        };
+    }
+
+    /** 玩家 KDR 排行榜喵~ kills 除以 sessions,分母为零的玩家不返回。 */
+    public static Query<List<TopListQueries.TopListEntry<Double>>> playerKdrLeaderboard(ServerUUID server, int limit, long after, long before) {
+        return ratioLeaderboard(true, server, limit, after, before);
+    }
+
+    /** 怪物 KDR 排行榜喵~ mob_kills 除以 sessions,分母为零的玩家不返回。 */
+    public static Query<List<TopListQueries.TopListEntry<Double>>> mobKdrLeaderboard(ServerUUID server, int limit, long after, long before) {
+        return ratioLeaderboard(false, server, limit, after, before);
+    }
+
+    private static Query<List<TopListQueries.TopListEntry<Double>>> ratioLeaderboard(boolean playerKills, ServerUUID server, int limit, long after, long before) {
+        String numerator = playerKills ? "COUNT(DISTINCT k." + KillsTable.ID + ")" : "SUM(s." + SessionsTable.MOB_KILLS + ")";
+        String killJoin = playerKills
+                ? LEFT_JOIN + KillsTable.TABLE_NAME + " k on k." + KillsTable.KILLER_UUID + "=u." + UsersTable.USER_UUID + AND + "k." + KillsTable.DATE + ">?" + AND + "k." + KillsTable.DATE + "<?"
+                : "";
+        String sql = SELECT + "u." + UsersTable.USER_NAME + ", (" + numerator + " * 1.0 / COUNT(DISTINCT s." + SessionsTable.ID + ")) as val" +
+                FROM + SessionsTable.TABLE_NAME + " s" +
+                INNER_JOIN + UsersTable.TABLE_NAME + " u on u." + UsersTable.ID + "=s." + SessionsTable.USER_ID + killJoin +
+                LEFT_JOIN + ServerTable.TABLE_NAME + " se on se." + ServerTable.ID + "=s." + SessionsTable.SERVER_ID +
+                (server != null ? WHERE + "se." + ServerTable.SERVER_UUID + "=?" + AND : WHERE) +
+                "s." + SessionsTable.SESSION_START + ">?" + AND + "s." + SessionsTable.SESSION_END + "<?" +
+                GROUP_BY + "u." + UsersTable.USER_NAME + ORDER_BY + "val DESC" + LIMIT + "?";
+        return new QueryStatement<List<TopListQueries.TopListEntry<Double>>>(sql, limit) {
+            @Override public void prepare(PreparedStatement statement) throws SQLException {
+                int parameterIndex = 1;
+                if (playerKills) { statement.setLong(parameterIndex++, after); statement.setLong(parameterIndex++, before); }
+                if (server != null) statement.setString(parameterIndex++, server.toString());
+                statement.setLong(parameterIndex++, after); statement.setLong(parameterIndex++, before); statement.setInt(parameterIndex, limit);
+            }
+            @Override public List<TopListQueries.TopListEntry<Double>> processResults(ResultSet set) throws SQLException {
+                List<TopListQueries.TopListEntry<Double>> entries = new ArrayList<>();
+                while (set.next()) entries.add(new TopListQueries.TopListEntry<>(set.getString(UsersTable.USER_NAME), set.getDouble("val")));
+                return entries;
+            }
+        };
     }
 
     /**

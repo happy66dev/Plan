@@ -74,6 +74,9 @@ public final class LeaderboardMetricRegistry {
         MOB_KILL_COUNT("mob_kill_count", LeaderboardQueries::mobKillCountLeaderboard),
         DEATH_COUNT("death_count", LeaderboardQueries::deathCountLeaderboard),
         PLAYER_KILL_COUNT("player_kill_count", LeaderboardQueries::playerKillCountLeaderboard),
+        MAX_PING("max_ping", LeaderboardQueries::maxPingLeaderboard),
+        PLAYER_KDR("player_kdr", LeaderboardQueries::playerKdrLeaderboard),
+        MOB_KDR("mob_kdr", LeaderboardQueries::mobKdrLeaderboard),
         // 踢出次数不区分时间窗与服务器,用 lambda 忽略对应参数
         KICK_COUNT("kick_count", (server, limit, after, before) -> LeaderboardQueries.kickCountLeaderboard(server, limit));
 
@@ -109,7 +112,7 @@ public final class LeaderboardMetricRegistry {
          * @param before 时间窗终点(毫秒)
          * @return 排行榜查询对象
          */
-        public Query<List<TopListQueries.TopListEntry<Long>>> createQuery(ServerUUID server, int limit, long after, long before) {
+        public Query<? extends List<? extends TopListQueries.TopListEntry<? extends Number>>> createQuery(ServerUUID server, int limit, long after, long before) {
             return queryFactory.create(server, limit, after, before);
         }
 
@@ -142,6 +145,6 @@ public final class LeaderboardMetricRegistry {
          * @param before 时间窗终点(毫秒)
          * @return 排行榜查询对象
          */
-        Query<List<TopListQueries.TopListEntry<Long>>> create(ServerUUID server, int limit, long after, long before);
+        Query<? extends List<? extends TopListQueries.TopListEntry<? extends Number>>> create(ServerUUID server, int limit, long after, long before);
     }
 }
