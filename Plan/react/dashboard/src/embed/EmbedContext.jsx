@@ -5,6 +5,8 @@ import React, {createContext, useContext, useEffect, useMemo, useState} from "re
 const EMBED_INIT_MESSAGE_TYPE = "PLAN_EMBED_INIT";
 // 喵~定义 Plan 向父页面报告就绪的消息名称喵~
 const EMBED_READY_MESSAGE_TYPE = "PLAN_EMBED_READY";
+// 喵~定义 Plan 向父页面报告 iframe 内容高度的消息名称喵~
+const EMBED_HEIGHT_MESSAGE_TYPE = "PLAN_EMBED_HEIGHT";
 // 喵~定义嵌入通信协议版本，避免不同版本消息混用喵~
 const EMBED_PROTOCOL_VERSION = 1;
 // 喵~定义 iframe 刷新时保存嵌入状态的 sessionStorage 键名喵~
@@ -146,6 +148,36 @@ const readEmbedCandidate = () => {
         || readStoredEmbedCandidate(playerRouteInfo);
 };
 
+// 喵~计算当前 Plan 文档所需的 iframe 高度并限制范围喵~
+const getEmbedDocumentHeight = () => {
+    // 喵~读取根节点和 body 的多种高度，兼容不同浏览器布局行为喵~
+    const documentElement = document.documentElement;
+    const documentBody = document.body;
+    const measuredHeight = Math.max(
+        documentElement?.scrollHeight || 0,
+        documentElement?.offsetHeight || 0,
+        documentElement?.clientHeight || 0,
+        documentBody?.scrollHeight || 0,
+        documentBody?.offsetHeight || 0,
+        documentBody?.clientHeight || 0
+    );
+    // 喵~防御：非法或过大尺寸回退到安全高度，避免污染父页面布局喵~
+    if (!Number.isFinite(measuredHeight)) return 600;
+    return Math.min(20000, Math.max(320, Math.ceil(measuredHeight)));
+};
+
+// 喵~向已校验的父页面报告当前 iframe 高度喵~
+const sendEmbedHeight = (candidate, height) => {
+    // 喵~向精确父页面 origin 发送高度消息，禁止使用通配符喵~
+    window.parent.postMessage({
+        protocol: EMBED_PROTOCOL_VERSION,
+        type: EMBED_HEIGHT_MESSAGE_TYPE,
+        nonce: candidate.nonce,
+        playerIdentifier: candidate.playerIdentifier,
+        height
+    }, candidate.parentOrigin);
+};
+
 // 喵~保存握手成功后的最小嵌入状态，供 iframe 刷新后恢复路由限制喵~
 const persistEmbedCandidate = (candidate) => {
     try {
@@ -211,6 +243,20 @@ export const EmbedContextProvider = ({children}) => {
             nonce: embedCandidate.nonce,
             playerIdentifier: embedCandidate.playerIdentifier
         }, embedCandidate.parentOrigin);
+        let resizeObserver;
+        let resizeFrameId = 0;
+        let lastReportedHeight = 0;
+        const reportHeight = () => {
+            // 喵~取消重复的待处理测量任务喵~
+            if (resizeFrameId) window.cancelAnimationFrame(resizeFrameId);
+            // 喵~合并连续布局变化，降低 iframe 高度消息频率喵~
+            resizeFrameId = window.requestAnimationFrame(() => {
+                const currentHeight = getEmbedDocumentHeight();
+                if (currentHeight === lastReportedHeight) return;
+                lastReportedHeight = currentHeight;
+                sendEmbedHeight(embedCandidate, currentHeight);
+            });
+        };
         const handleEmbedMessage = (event) => {
             if (event.source !== window.parent || event.origin !== embedCandidate.parentOrigin) return;
             if (!event.data || typeof event.data !== "object") return;
@@ -219,9 +265,22 @@ export const EmbedContextProvider = ({children}) => {
             if (event.data.locale !== "CN") return;
             persistEmbedCandidate(embedCandidate);
             setIsEmbedActive(true);
+            reportHeight();
+            if (typeof ResizeObserver === "function") {
+                resizeObserver = new ResizeObserver(reportHeight);
+                if (document.documentElement) resizeObserver.observe(document.documentElement);
+                if (document.body) resizeObserver.observe(document.body);
+            } else {
+                window.addEventListener("resize", reportHeight);
+            }
         };
         window.addEventListener("message", handleEmbedMessage);
-        return () => window.removeEventListener("message", handleEmbedMessage);
+        return () => {
+            window.removeEventListener("message", handleEmbedMessage);
+            if (resizeObserver) resizeObserver.disconnect();
+            window.removeEventListener("resize", reportHeight);
+            if (resizeFrameId) window.cancelAnimationFrame(resizeFrameId);
+        };
     }, []);
 
     const contextValue = useMemo(() => ({
