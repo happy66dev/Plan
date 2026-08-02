@@ -36,6 +36,7 @@ public class BukkitListenerSystem extends ListenerSystem {
     private final WorldChangeListener worldChangeListener;
     private final DeathEventListener deathEventListener;
     private final BukkitAFKListener afkListener;
+    private final BlockEventListener blockEventListener;
 
     @Inject
     public BukkitListenerSystem(
@@ -46,7 +47,8 @@ public class BukkitListenerSystem extends ListenerSystem {
             GameModeChangeListener gamemodeChangeListener,
             WorldChangeListener worldChangeListener,
             DeathEventListener deathEventListener,
-            BukkitAFKListener afkListener
+            BukkitAFKListener afkListener,
+            BlockEventListener blockEventListener
     ) {
         this.listeners = listeners;
         this.status = status;
@@ -57,6 +59,7 @@ public class BukkitListenerSystem extends ListenerSystem {
         this.worldChangeListener = worldChangeListener;
         this.deathEventListener = deathEventListener;
         this.afkListener = afkListener;
+        this.blockEventListener = blockEventListener;
     }
 
     @Override
@@ -67,6 +70,7 @@ public class BukkitListenerSystem extends ListenerSystem {
         listeners.registerListener(worldChangeListener);
         listeners.registerListener(deathEventListener);
         listeners.registerListener(afkListener);
+        listeners.registerListener(blockEventListener);
         status.setCountKicks(true);
     }
 

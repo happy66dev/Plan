@@ -20,6 +20,7 @@ import com.djrapitops.plan.identification.ServerUUID;
 import com.djrapitops.plan.storage.database.queries.Query;
 import com.djrapitops.plan.storage.database.queries.QueryStatement;
 import com.djrapitops.plan.storage.database.sql.tables.KillsTable;
+import com.djrapitops.plan.storage.database.sql.tables.BlockEventsTable;
 import com.djrapitops.plan.storage.database.sql.tables.PingTable;
 import com.djrapitops.plan.storage.database.sql.tables.ServerTable;
 import com.djrapitops.plan.storage.database.sql.tables.SessionsTable;
@@ -242,6 +243,31 @@ public class LeaderboardQueries {
                 return entries;
             }
         };
+    }
+
+    public static Query<List<TopListQueries.TopListEntry<Long>>> blockEventCountLeaderboard(ServerUUID server, int limit, long after, long before, String eventType) {
+        String serverWhere = server != null ? WHERE + "b." + BlockEventsTable.SERVER_UUID + "=?" + AND : WHERE;
+        String sql = SELECT + "u." + UsersTable.USER_NAME + ", COUNT(1) as val" + FROM + BlockEventsTable.TABLE_NAME + " b" + INNER_JOIN + UsersTable.TABLE_NAME + " u on u." + UsersTable.USER_UUID + "=b." + BlockEventsTable.PLAYER_UUID + serverWhere + "b." + BlockEventsTable.DATE + ">?" + AND + "b." + BlockEventsTable.DATE + "<?" + AND + "b." + BlockEventsTable.TYPE + "=?" + GROUP_BY + "u." + UsersTable.USER_NAME + ORDER_BY + "val DESC" + LIMIT + "?";
+        return new QueryStatement<List<TopListQueries.TopListEntry<Long>>>(sql, limit) {
+            @Override public void prepare(PreparedStatement statement) throws SQLException {
+                int index = 1;
+                if (server != null) statement.setString(index++, server.toString());
+                statement.setLong(index++, after); statement.setLong(index++, before); statement.setString(index++, eventType); statement.setInt(index, limit);
+            }
+            @Override public List<TopListQueries.TopListEntry<Long>> processResults(ResultSet set) throws SQLException {
+                List<TopListQueries.TopListEntry<Long>> entries = new ArrayList<>();
+                while (set.next()) entries.add(new TopListQueries.TopListEntry<>(set.getString(UsersTable.USER_NAME), set.getLong("val")));
+                return entries;
+            }
+        };
+    }
+
+    public static Query<List<TopListQueries.TopListEntry<Long>>> blockBreakCountLeaderboard(ServerUUID server, int limit, long after, long before) {
+        return blockEventCountLeaderboard(server, limit, after, before, "block_break");
+    }
+
+    public static Query<List<TopListQueries.TopListEntry<Long>>> blockPlaceCountLeaderboard(ServerUUID server, int limit, long after, long before) {
+        return blockEventCountLeaderboard(server, limit, after, before, "block_place");
     }
 
     /**

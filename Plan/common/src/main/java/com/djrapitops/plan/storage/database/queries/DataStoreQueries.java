@@ -51,6 +51,18 @@ public class DataStoreQueries {
      * @param session a finished session
      * @return Executable, use inside a {@link com.djrapitops.plan.storage.database.transactions.Transaction}
      */
+    public static Executable storeBlockEvent(UUID playerUUID, ServerUUID serverUUID, long date, String type) {
+        return new ExecStatement(BlockEventsTable.INSERT_STATEMENT) {
+            @Override
+            public void prepare(PreparedStatement statement) throws SQLException {
+                statement.setString(1, playerUUID.toString());
+                statement.setString(2, serverUUID.toString());
+                statement.setLong(3, date);
+                statement.setString(4, type);
+            }
+        };
+    }
+
     public static Executable storeSession(FinishedSession session) {
         return connection -> {
             storeSessionInformation(session).execute(connection);

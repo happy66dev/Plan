@@ -78,6 +78,8 @@ public final class LeaderboardMetricRegistry {
         PLAYER_KDR("player_kdr", LeaderboardQueries::playerKdrLeaderboard),
         MOB_KDR("mob_kdr", LeaderboardQueries::mobKdrLeaderboard),
         // 踢出次数不区分时间窗与服务器,用 lambda 忽略对应参数
+        BLOCK_BREAK_COUNT("block_break_count", LeaderboardQueries::blockBreakCountLeaderboard),
+        BLOCK_PLACE_COUNT("block_place_count", LeaderboardQueries::blockPlaceCountLeaderboard),
         KICK_COUNT("kick_count", (server, limit, after, before) -> LeaderboardQueries.kickCountLeaderboard(server, limit));
 
         private final String name;                       // field 参数使用的指标名(小写)
